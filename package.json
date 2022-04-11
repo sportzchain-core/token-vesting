@@ -1,8 +1,23 @@
 {
-  "name": "hardhat-project",
+  "name": "token-vesting",
+  "description": "SportZchain Token Vesting Smart Contracts",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test:normal": "npx hardhat test test/TokenVestingNormal.test.js",
+    "test:factory": "npx hardhat test test/TokenVestingFactory.test.js",
+    "test:clone": "npx hardhat test test/TokenVestingClone.test.js",
+    "verify": "npx hardhat verify --network rinkeby CONTRACT_ADDRESS",
+    "deploy": "npx hardhat run --network rinkeby scripts/deploy.js"
+  },
+  "keywords": [
+    "solidity",
+    "erc20"
+  ],
+  "author": "sportzchain-core",
+  "license": "MIT",
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
-    "@nomiclabs/hardhat-etherscan": "^2.1.6",
+    "@nomiclabs/hardhat-etherscan": "^3.0.3",
     "@nomiclabs/hardhat-waffle": "^2.0.1",
     "chai": "^4.3.4",
     "dotenv": "^10.0.0",
@@ -16,13 +31,14 @@
     "ethereum-waffle": "^3.4.0",
     "ethers": "^5.4.1",
     "hardhat": "^2.4.1",
+    "hardhat-contract-sizer": "^2.5.1",
     "hardhat-gas-reporter": "^1.0.4",
     "prettier": "^2.4.1",
     "prettier-plugin-solidity": "^1.0.0-beta.13",
     "solhint": "^3.3.6"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.0.0",
+    "@openzeppelin/contracts": "4.5.0",
     "@openzeppelin/test-helpers": "^0.5.10",
     "chai-as-promised": "^7.1.1",
     "chai-bignumber": "^3.0.0",
