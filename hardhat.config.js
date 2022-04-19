@@ -49,7 +49,6 @@ module.exports = {
     enabled: (process.env.REPORT_GAS) ? true : false,
     token: 'ETH',
     gasPriceApi: 'https://api.etherscan.io/api?module=proxy&action=eth_gasPrice',
-    // gasPrice: 2.857531333,
     currency: 'USD',
     coinmarketcap: process.env.COINMARKETCAP_API_KEY
   },

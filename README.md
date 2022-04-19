@@ -27,17 +27,7 @@ $ npm i
 ```
 $ npm run compile
 ```
-5. test contracts
-
-- run normal test
+6. test contracts
 ```
-$ npm run test:normal
-```
-- run factory test
-```
-$ npm run test:factory
-```
-- run clone test
-```
-$ npm run test:clone
+$ npm run test
 ```

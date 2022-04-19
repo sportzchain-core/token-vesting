@@ -27,7 +27,7 @@ describe("TokenVesting contract test", async function () {
 
     /* TOKEN_CONTRCT */
 
-    TokenContract = await ethers.getContractFactory("MyToken");
+    TokenContract = await ethers.getContractFactory("TestToken");
 
     Token = await TokenContract.deploy();
 

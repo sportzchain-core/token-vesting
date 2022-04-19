@@ -3,9 +3,7 @@
   "description": "SportZchain Token Vesting Smart Contracts",
   "scripts": {
     "compile": "npx hardhat compile",
-    "test:normal": "npx hardhat test test/TokenVestingNormal.test.js",
-    "test:factory": "npx hardhat test test/TokenVestingFactory.test.js",
-    "test:clone": "npx hardhat test test/TokenVestingClone.test.js",
+    "test": "npx hardhat test",
     "verify": "npx hardhat verify --network rinkeby CONTRACT_ADDRESS",
     "deploy": "npx hardhat run --network rinkeby scripts/deploy.js"
   },
