@@ -130,7 +130,7 @@ describe("TokenVesting contract test", async function () {
     it("Should release tokens from vesting", async function() {
       await hre.network.provider.request({
         method: "evm_increaseTime",
-        params: [60],
+        params: [100],
       });
 
       await hre.network.provider.request({
