@@ -83,8 +83,9 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
 
     function __TokenVesting_init_unchained(address token_, address owner_) internal onlyInitializing {
         _token = IERC20(token_);
-        // set the owner as the admin
+        // set the owner as the admin & grantor
         _setupRole(DEFAULT_ADMIN_ROLE, owner_);
+        _setupRole(GRANTOR_ROLE, owner_);
     }
 
     // @dev default no action functions

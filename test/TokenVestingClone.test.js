@@ -55,9 +55,9 @@ describe("TokenVesting contract test", async function () {
           address // The deployed contract address
         );
 
-        await expect(VESTING1.grantRole(GRANTER_ROLE , owner.address))
-        .to.emit(VESTING1, "RoleGranted")
-        .withArgs(GRANTER_ROLE, owner.address, owner.address);
+        // await expect(VESTING1.grantRole(GRANTER_ROLE , owner.address))
+        // .to.emit(VESTING1, "RoleGranted")
+        // .withArgs(GRANTER_ROLE, owner.address, owner.address);
     });
 
     it("Should throw error on create Vesting Schedule if contract has not enough token balance", async function() {
