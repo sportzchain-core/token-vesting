@@ -39,6 +39,9 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 amountTotal;        // total amount of tokens to be released at the end of the vesting
         uint256 released;          // amount of tokens released
         bool revoked;               // whether or not the vesting has been revoked
+        uint256 firstReleasePercent;   // percent to release after vesting start
+        uint256 secondReleasePercent;   // percent to release after x days of vesting start
+        uint256 secondReleaseTime;  // time for second release
     }
 
     // address of the ERC20 token
@@ -169,6 +172,9 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param _slicePeriodSeconds duration of a slice period for the vesting in seconds
     * @param _revocable whether the vesting is revocable or not
     * @param _amount total amount of tokens to be released at the end of the vesting
+    * @param _firstReleasePercent percent to release after vesting start
+    * @param _secondReleasePercent percent to release after x days of vesting start
+    * @param _secondReleaseTime time for second release
     */
     function createVestingSchedule(
         address _beneficiary,
@@ -177,7 +183,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 _duration,
         uint256 _slicePeriodSeconds,
         bool _revocable,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _firstReleasePercent,
+        uint256 _secondReleasePercent,
+        uint256 _secondReleaseTime
     )
     public
     onlyGrantor  {
@@ -188,6 +197,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         require(_duration > 0, "TokenVesting: duration must be > 0");
         require(_amount > 0, "TokenVesting: amount must be > 0");
         require(_slicePeriodSeconds >= 1, "TokenVesting: slicePeriodSeconds must be >= 1");
+        require(_firstReleasePercent + _secondReleasePercent <= 100, "TokenVesting: release percent must be <= 100");
 
         // compute a unique id for the vesting schedule
         bytes32 vestingScheduleId = this.computeNextVestingScheduleIdForHolder(_beneficiary);
@@ -206,7 +216,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
             _revocable,
             _amount,
             0,
-            false
+            false,
+            _firstReleasePercent,
+            _secondReleasePercent,
+            _secondReleaseTime
         );
 
         // total amount that was vested
@@ -369,6 +382,17 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     }
 
     /**
+    * @dev calculate token percent
+    *
+    * @param amount - number of tokens
+    * @param percent - percentage to calculate
+    * @return the amount of tokens by percent
+    */
+    function _calculatePercentAmount(uint256 amount, uint256 percent) internal pure returns(uint256) {
+        return (amount * percent / 100);
+    }
+
+    /**
     * @dev Computes the releasable amount of tokens for a vesting schedule.
     *
     * @param vestingSchedule - VestingSchedule data structure
@@ -380,19 +404,29 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     returns(uint256){
         uint256 currentTime = getCurrentTime();
 
+        uint256 firstReleaseAmount = _calculatePercentAmount(vestingSchedule.amountTotal, vestingSchedule.firstReleasePercent);
+        uint256 secondReleaseAmount = _calculatePercentAmount(vestingSchedule.amountTotal, vestingSchedule.secondReleasePercent);
+        uint256 releasedAmount = vestingSchedule.released;
+
         if ((currentTime < vestingSchedule.cliff) || vestingSchedule.revoked == true) {
             // time is less than cliff or vesting is revoked
             return 0;
+        } else if (currentTime >= vestingSchedule.start && firstReleaseAmount > releasedAmount) {
+            // first percent release
+            return firstReleaseAmount - releasedAmount;
+        } else if (currentTime >= vestingSchedule.secondReleaseTime && secondReleaseAmount > releasedAmount) {
+            // second percent release
+            return firstReleaseAmount + secondReleaseAmount - releasedAmount;
         } else if (currentTime >= vestingSchedule.start + vestingSchedule.duration) {
             // time is greater than vesting durations
-            return vestingSchedule.amountTotal - vestingSchedule.released;
+            return vestingSchedule.amountTotal - releasedAmount;
         } else {
             uint256 timeFromStart = currentTime - vestingSchedule.start;
             uint secondsPerSlice = vestingSchedule.slicePeriodSeconds;
             uint256 vestedSlicePeriods = timeFromStart / secondsPerSlice;
             uint256 vestedSeconds = vestedSlicePeriods * secondsPerSlice;
             uint256 vestedAmount = vestingSchedule.amountTotal * vestedSeconds / vestingSchedule.duration;
-            vestedAmount = vestedAmount - vestingSchedule.released;
+            vestedAmount = vestedAmount - releasedAmount;
             return vestedAmount;
         }
     }
