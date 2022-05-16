@@ -375,13 +375,14 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * with this contract to the caller
     *
     * @param amount the amount to withdraw
+    * @param receiver the amount receiver address
     */
-    function withdraw(uint256 amount)
+    function withdraw(uint256 amount, address receiver)
     public
     onlyGrantor
     nonReentrant  {
         require(this.getWithdrawableAmount() >= amount, "TokenVesting: not enough withdrawable funds");
-        _token.safeTransfer(msg.sender, amount);
+        _token.safeTransfer(receiver, amount);
     }
 
     /**

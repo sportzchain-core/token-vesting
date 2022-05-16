@@ -310,7 +310,7 @@ describe("TokenVesting contract test", async function () {
     });
 
     it("Should withdraw tokens", async function() {
-      await expect(VESTING1.withdraw(THOUSAND_TOKENS))
+      await expect(VESTING1.withdraw(THOUSAND_TOKENS, owner.address))
       .to.emit(Token, "Transfer")
       .withArgs(VESTING1.address, owner.address, THOUSAND_TOKENS);
 
