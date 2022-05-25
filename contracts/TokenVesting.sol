@@ -39,7 +39,13 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 amountTotal;        // total amount of tokens to be released at the end of the vesting
         uint256 released;          // amount of tokens released
         bool revoked;               // whether or not the vesting has been revoked
+        uint256 firstReleasePercent;   // percent to release after vesting start
+        uint256 secondReleasePercent;   // percent to release after x days of vesting start
+        uint256 secondReleaseTime;  // time for second release
     }
+
+    // locked schedule
+    VestingSchedule private lockedSchedule;
 
     // address of the ERC20 token
     IERC20 private _token;
@@ -169,6 +175,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param _slicePeriodSeconds duration of a slice period for the vesting in seconds
     * @param _revocable whether the vesting is revocable or not
     * @param _amount total amount of tokens to be released at the end of the vesting
+    * @param _firstReleasePercent percent to release after vesting start
+    * @param _secondReleasePercent percent to release after x days of vesting start
+    * @param _secondReleaseTime time for second release
+    * @param _fromLocked create vesting from locked tokens
     */
     function createVestingSchedule(
         address _beneficiary,
@@ -177,17 +187,22 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 _duration,
         uint256 _slicePeriodSeconds,
         bool _revocable,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _firstReleasePercent,
+        uint256 _secondReleasePercent,
+        uint256 _secondReleaseTime,
+        bool _fromLocked
     )
     public
     onlyGrantor  {
         require(
-            this.getWithdrawableAmount() >= _amount,
+            ((_fromLocked) ? lockedSchedule.amountTotal - lockedSchedule.released : this.getWithdrawableAmount()) >= _amount,
             "TokenVesting: cannot create vesting schedule because not sufficient tokens"
         );
         require(_duration > 0, "TokenVesting: duration must be > 0");
         require(_amount > 0, "TokenVesting: amount must be > 0");
         require(_slicePeriodSeconds >= 1, "TokenVesting: slicePeriodSeconds must be >= 1");
+        require(_firstReleasePercent + _secondReleasePercent <= 100, "TokenVesting: release percent must be <= 100");
 
         // compute a unique id for the vesting schedule
         bytes32 vestingScheduleId = this.computeNextVestingScheduleIdForHolder(_beneficiary);
@@ -206,15 +221,22 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
             _revocable,
             _amount,
             0,
-            false
+            false,
+            _firstReleasePercent,
+            _secondReleasePercent,
+            _secondReleaseTime
         );
 
-        // total amount that was vested
-        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount + _amount;
-
         vestingSchedulesIds.push(vestingScheduleId);
-        uint256 currentVestingCount = holdersVestingCount[_beneficiary];
-        holdersVestingCount[_beneficiary] = currentVestingCount + 1;
+        holdersVestingCount[_beneficiary] += 1;
+
+        if(_fromLocked) {
+            // update locked tokens
+            lockedSchedule.amountTotal -= _amount;
+        } else {
+            // total amount that was vested
+            vestingSchedulesTotalAmount = vestingSchedulesTotalAmount + _amount;
+        }
     }
 
     /**
@@ -267,6 +289,23 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     }
 
     /**
+    * @notice Release locked vested amount of tokens.
+    *
+    * @param amount the amount to release
+    */
+    function releaseLocked(
+        uint256 amount
+    )
+    public
+    onlyGrantor
+    nonReentrant {
+        uint256 vestedAmount = _computeReleasableAmount(lockedSchedule);
+        require(vestedAmount >= amount, "TokenVesting: cannot release tokens, not enough vested tokens");
+        lockedSchedule.released = lockedSchedule.released + amount;
+        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount - amount;
+    }
+
+    /**
     * @dev Returns the number of vesting schedules managed by this contract.
     * @return the number of vesting schedules
     */
@@ -275,6 +314,18 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     view
     returns(uint256){
         return vestingSchedulesIds.length;
+    }
+
+    /**
+    * @notice Computes the vested amount of locked tokens.
+    *
+    * @return the vested amount
+    */
+    function computeLockedReleasableAmount()
+    public
+    view
+    returns(uint256){
+        return _computeReleasableAmount(lockedSchedule);
     }
 
     /**
@@ -306,19 +357,72 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     }
 
     /**
+    * @notice Returns the locked vesting schedule information.
+    *
+    * @return the vesting schedule structure information
+    */
+    function getLockedVestingSchedule()
+    public
+    view
+    returns(VestingSchedule memory){
+        return lockedSchedule;
+    }
+
+    /**
     * @notice Withdraw the specified amount if possible.
     *
     * @dev This function can be used to withdraw the available tokens
     * with this contract to the caller
     *
     * @param amount the amount to withdraw
+    * @param receiver the amount receiver address
     */
-    function withdraw(uint256 amount)
+    function withdraw(uint256 amount, address receiver)
     public
     onlyGrantor
     nonReentrant  {
         require(this.getWithdrawableAmount() >= amount, "TokenVesting: not enough withdrawable funds");
-        _token.safeTransfer(msg.sender, amount);
+        _token.safeTransfer(receiver, amount);
+    }
+
+    /**
+    * @notice Creates a new vesting schedule for a contract it self.
+    *
+    * @param _start start time of the vesting period
+    * @param _cliff duration in seconds of the cliff in which tokens will begin to vest
+    * @param _duration duration in seconds of the period in which the tokens will vest
+    * @param _slicePeriodSeconds duration of a slice period for the vesting in seconds
+    */
+    function lockWithdrawableAmount(
+        uint256 _start,
+        uint256 _cliff,
+        uint256 _duration,
+        uint256 _slicePeriodSeconds
+    )
+    public
+    onlyGrantor
+    nonReentrant {
+        require(
+            this.getWithdrawableAmount() > 0,
+            "TokenVesting: withdrawable amount must be > 0"
+        );
+        require(_duration > 0, "TokenVesting: duration must be > 0");
+        require(_slicePeriodSeconds >= 1, "TokenVesting: slicePeriodSeconds must be >= 1");
+
+        // set the cliff from the start time
+        uint256 cliff = _start + _cliff;
+
+        // update the locked vesting schedule
+        lockedSchedule.initialized = true;
+        lockedSchedule.beneficiary = address(this);
+        lockedSchedule.amountTotal += this.getWithdrawableAmount();
+        lockedSchedule.cliff = cliff;
+        lockedSchedule.start = _start;
+        lockedSchedule.duration = _duration;
+        lockedSchedule.slicePeriodSeconds = _slicePeriodSeconds;
+
+        // total amount that was vested
+        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount + this.getWithdrawableAmount();
     }
 
     /**
@@ -369,6 +473,17 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     }
 
     /**
+    * @dev calculate token percent
+    *
+    * @param amount - number of tokens
+    * @param percent - percentage to calculate
+    * @return the amount of tokens by percent
+    */
+    function _calculatePercentAmount(uint256 amount, uint256 percent) internal pure returns(uint256) {
+        return (amount * percent / 100);
+    }
+
+    /**
     * @dev Computes the releasable amount of tokens for a vesting schedule.
     *
     * @param vestingSchedule - VestingSchedule data structure
@@ -380,19 +495,29 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     returns(uint256){
         uint256 currentTime = getCurrentTime();
 
+        uint256 firstReleaseAmount = _calculatePercentAmount(vestingSchedule.amountTotal, vestingSchedule.firstReleasePercent);
+        uint256 secondReleaseAmount = _calculatePercentAmount(vestingSchedule.amountTotal, vestingSchedule.secondReleasePercent);
+        uint256 releasedAmount = vestingSchedule.released;
+
         if ((currentTime < vestingSchedule.cliff) || vestingSchedule.revoked == true) {
             // time is less than cliff or vesting is revoked
             return 0;
+        } else if (currentTime >= vestingSchedule.start && firstReleaseAmount > releasedAmount) {
+            // first percent release
+            return firstReleaseAmount - releasedAmount;
+        } else if (currentTime >= vestingSchedule.secondReleaseTime && secondReleaseAmount > releasedAmount) {
+            // second percent release
+            return firstReleaseAmount + secondReleaseAmount - releasedAmount;
         } else if (currentTime >= vestingSchedule.start + vestingSchedule.duration) {
             // time is greater than vesting durations
-            return vestingSchedule.amountTotal - vestingSchedule.released;
+            return vestingSchedule.amountTotal - releasedAmount;
         } else {
             uint256 timeFromStart = currentTime - vestingSchedule.start;
             uint secondsPerSlice = vestingSchedule.slicePeriodSeconds;
             uint256 vestedSlicePeriods = timeFromStart / secondsPerSlice;
             uint256 vestedSeconds = vestedSlicePeriods * secondsPerSlice;
             uint256 vestedAmount = vestingSchedule.amountTotal * vestedSeconds / vestingSchedule.duration;
-            vestedAmount = vestedAmount - vestingSchedule.released;
+            vestedAmount = vestedAmount - releasedAmount;
             return vestedAmount;
         }
     }
