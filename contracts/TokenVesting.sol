@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "hardhat/console.sol";
 
 /**
  * @title Contract for SportZchain token vesting
@@ -24,7 +25,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyGrantor() {
-        require(hasRole(GRANTOR_ROLE, msg.sender), "Caller is not a Grantor");
+        require(hasRole(GRANTOR_ROLE, msg.sender), "TokenVesting: Caller is not a Grantor");
         _;
     }
 
@@ -92,6 +93,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         // set the owner as the admin & grantor
         _setupRole(DEFAULT_ADMIN_ROLE, owner_);
         _setupRole(GRANTOR_ROLE, owner_);
+
+        _transferOwnership(owner_);
     }
 
     // @dev default no action functions
@@ -369,6 +372,40 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     }
 
     /**
+    * @dev This function can be used to set start date of particular vesting
+    *
+    * @param vestingScheduleId id of vesting schedule
+    * @param start start time of the vesting period
+    */
+    function setStartDateOfVestingSchedule(bytes32 vestingScheduleId, uint256 start)
+    public
+    onlyGrantor {
+        require(
+            vestingSchedules[vestingScheduleId].start == 0 ||
+            vestingSchedules[vestingScheduleId].start > getCurrentTime(), "TokenVesting: schedule is already active");
+        vestingSchedules[vestingScheduleId].start = start;
+    }
+
+    /**
+    * @dev This function can be used to set start date of particular vesting
+    *
+    * @param vestingScheduleIds id of vesting schedule (array)
+    * @param startDates start time of the vesting period (array)
+    */
+    function setStartDateOfMultipleVestingSchedules(bytes32[] memory vestingScheduleIds, uint256[] memory startDates)
+    public
+    onlyGrantor {
+        require(vestingScheduleIds.length == startDates.length, "TokenVesting: both arrays length mismatch");
+
+        for (uint256 i = 0; i < vestingScheduleIds.length; i++) {
+            require(
+                vestingSchedules[vestingScheduleIds[i]].start == 0 ||
+                vestingSchedules[vestingScheduleIds[i]].start > getCurrentTime(), "TokenVesting: schedule is already active");
+            vestingSchedules[vestingScheduleIds[i]].start = startDates[i];
+        }
+    }
+
+    /**
     * @notice Withdraw the specified amount if possible.
     *
     * @dev This function can be used to withdraw the available tokens
@@ -499,7 +536,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 secondReleaseAmount = _calculatePercentAmount(vestingSchedule.amountTotal, vestingSchedule.secondReleasePercent);
         uint256 releasedAmount = vestingSchedule.released;
 
-        if ((currentTime < vestingSchedule.cliff) || vestingSchedule.revoked == true) {
+        if (vestingSchedule.start == 0 || (currentTime < vestingSchedule.cliff) || vestingSchedule.revoked == true) {
             // time is less than cliff or vesting is revoked
             return 0;
         } else if (currentTime >= vestingSchedule.start && firstReleaseAmount > releasedAmount) {
