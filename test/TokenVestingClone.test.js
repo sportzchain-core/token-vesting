@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const hre = require("hardhat");
 
-describe("TokenVesting contract test", async function () {
+describe("All contracts test", async function () {
   let TokenVestingCloneContract;
   let TokenVestingClone;
   let TokenContract;
@@ -14,6 +14,11 @@ describe("TokenVesting contract test", async function () {
   let VESTING1;
   let VESTING2;
 
+  let MAIN_VESTING_CONTRACT;
+  let MAIN_VESTING;
+
+  const VESTING_ABI = ["function initialize(address token_, address owner_)"];
+
   const DEFAULT_ADMIN_ROLE = '0x0000000000000000000000000000000000000000000000000000000000000000';
   const GRANTER_ROLE = '0xd10feaa7fea55567e367a112bc53907318a50949442dfc0570945570c5af57cf';
 
@@ -22,7 +27,7 @@ describe("TokenVesting contract test", async function () {
 
   let ALL_VESTING_SCHEDULES = [];
 
-  async function createNewVestingSchedule(fromLocked) {
+  async function createNewVestingSchedule(fromLocked, noStart = false) {
     /*
       function createVestingSchedule(
         address _beneficiary,
@@ -41,7 +46,7 @@ describe("TokenVesting contract test", async function () {
 
     let c_date = parseInt(Date.now() / 1000);
     let _beneficiary = addr1.address;
-    let _start = c_date; // timestamp
+    let _start = (noStart) ? 0 : c_date; // timestamp
     let _cliff = 60; // seconds
     let _duration = 60; // seconds
     let _slicePeriodSeconds = 60; // seconds
@@ -99,27 +104,57 @@ describe("TokenVesting contract test", async function () {
 
     /* ------------------------------------------------------------------------------ */
 
-    TokenVestingCloneContract = await ethers.getContractFactory("TokenVestingClone");
+    TokenVestingCloneContract = await ethers.getContractFactory("Cloner");
 
-    TokenVestingClone = await TokenVestingCloneContract.deploy(TOKEN_ADDRESS);
+    TokenVestingClone = await TokenVestingCloneContract.deploy();
+
+    MAIN_VESTING_CONTRACT = await ethers.getContractFactory("TokenVesting");
+
+    MAIN_VESTING = await MAIN_VESTING_CONTRACT.deploy();
   });
 
-  describe("Deployment Using TokenVestingClone", function() {
+  describe("Cloner contract tests", function() {
     it("Should deploy new vesting contract", async function() {
-        const tx1 = await TokenVestingClone.createNewVestingContract();
-        const { gasUsed: createGasUsed, events } = await tx1.wait();
-        const { address } = events.find(Boolean);
-        // console.log(`deployed address: ${address}`);
+      const iVesting = new ethers.utils.Interface(VESTING_ABI);
 
-        VESTING1 = await VESTING_CONTRACT.attach(
-          address // The deployed contract address
-        );
+      let sEncoded = iVesting.encodeFunctionData("initialize", [
+        TOKEN_ADDRESS, owner.address
+      ]);
+   
+      const tx1 = await TokenVestingClone.clone(MAIN_VESTING.address, sEncoded);
+      const { gasUsed: createGasUsed, events } = await tx1.wait();
 
-        // await expect(VESTING1.grantRole(GRANTER_ROLE , owner.address))
-        // .to.emit(VESTING1, "RoleGranted")
-        // .withArgs(GRANTER_ROLE, owner.address, owner.address);
+      const { address } = events.find(Boolean);
+      // console.log(`deployed address: ${address}`);
+
+      VESTING1 = await VESTING_CONTRACT.attach(
+        address // The deployed contract address
+      );
+
+      // await expect(VESTING1.grantRole(GRANTER_ROLE , owner.address))
+      // .to.emit(VESTING1, "RoleGranted")
+      // .withArgs(GRANTER_ROLE, owner.address, owner.address);
     });
+    it("Should deploy new vesting contract with 0 VestingSchedules", async function() {
+      const iVesting = new ethers.utils.Interface(VESTING_ABI);
 
+      let sEncoded = iVesting.encodeFunctionData("initialize", [
+        TOKEN_ADDRESS, owner.address
+      ]);
+
+      const tx1 = await TokenVestingClone.clone(MAIN_VESTING.address, sEncoded);
+      const { gasUsed: createGasUsed, events } = await tx1.wait();
+      const { address } = events.find(Boolean);
+      // console.log(`deployed address: ${address}`);
+
+      VESTING2 = await VESTING_CONTRACT.attach(
+        address // The deployed contract address
+      );
+
+      expect(await VESTING2.getVestingSchedulesCount()).to.equal(0);
+    });
+  });
+  describe("TokenVesting contract tests", function() {
     it("Should throw error on create Vesting Schedule if contract has not enough token balance", async function() {
       let c_date = parseInt(Date.now() / 1000);
       let _beneficiary = addr1.address;
@@ -317,17 +352,55 @@ describe("TokenVesting contract test", async function () {
       expect(await VESTING1.getWithdrawableAmount()).to.equal(0);
     });
 
-    it("Should deploy new vesting contract with 0 VestingSchedules", async function() {
-        const tx1 = await TokenVestingClone.createNewVestingContract();
-        const { gasUsed: createGasUsed, events } = await tx1.wait();
-        const { address } = events.find(Boolean);
-        // console.log(`deployed address: ${address}`);
+    it("Should transfer tokens to second contract", async function() {
+      await expect(Token.transfer(VESTING1.address, THREE_THOUSAND_TOKENS))
+      .to.emit(Token, "Transfer")
+      .withArgs(owner.address, VESTING1.address, THREE_THOUSAND_TOKENS);
+    });
 
-        VESTING2 = await VESTING_CONTRACT.attach(
-          address // The deployed contract address
-        );
+    it("Should create 3 new Vesting Schedule with zero start time", async function () {
+      await createNewVestingSchedule(false, true);
+      await createNewVestingSchedule(false, true);
+      await createNewVestingSchedule(false, true);
+    });
 
-        expect(await VESTING2.getVestingSchedulesCount()).to.equal(0);
+    it("Should set new start time for particular vestiing schedule", async function() {
+      let VestingScheduleId = await VESTING1.computeVestingScheduleIdForAddressAndIndex(addr1.address, 2);
+
+      let c_date = parseInt(Date.now() / 1000);
+
+      await VESTING1.setStartDateOfVestingSchedule(VestingScheduleId, c_date);
+
+      let data = await VESTING1.getVestingSchedule(VestingScheduleId);
+
+      expect(Number(data.start)).to.be.equal(c_date);
+    });
+
+    it("Should throw error on set new start date if schedule already started (current_date > schedule_date)", async function() {
+      let VestingScheduleId = await VESTING1.computeVestingScheduleIdForAddressAndIndex(addr1.address, 2);
+
+      let c_date = parseInt(Date.now() / 1000);
+
+      await expect(VESTING1.setStartDateOfVestingSchedule(VestingScheduleId, c_date))
+        .to.be.revertedWith("TokenVesting: schedule is already active");
+    });
+
+    it("Should set new start time for multiple vestiing schedules", async function() {
+      let VestingScheduleIds =  [
+        await VESTING1.computeVestingScheduleIdForAddressAndIndex(addr1.address, 3),
+        await VESTING1.computeVestingScheduleIdForAddressAndIndex(addr1.address, 4)
+      ];
+
+      let c_date = parseInt(Date.now() / 1000);
+
+      let dates = [c_date, c_date];
+
+      await VESTING1.setStartDateOfMultipleVestingSchedules(VestingScheduleIds, dates);
+
+      for(let x = 0; x <= 1; x++) {
+        let data = await VESTING1.getVestingSchedule(VestingScheduleIds[x]);
+        expect(Number(data.start)).to.be.equal(dates[x]);
+      }
     });
   });
 });
