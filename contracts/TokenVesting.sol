@@ -63,8 +63,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     mapping(address => uint256) private holdersVestingCount;
 
     // events
-    event Released(uint256 amount);
-    event Revoked();
+    event VestingCreated(bytes32 vestingScheduleId, address beneficiary);
+    event VestingReleased(bytes32 vestingScheduleId, uint256 amount);
+    event VestingRevoked(bytes32 vestingScheduleId);
+    event VestingUpdated(bytes32 vestingScheduleId, uint256 start);
 
     /**
     * @dev Reverts if no vesting schedule matches the passed identifier.
@@ -239,6 +241,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
             // total amount that was vested
             vestingSchedulesTotalAmount = vestingSchedulesTotalAmount + _amount;
         }
+
+        emit VestingCreated(vestingScheduleId, _beneficiary);
     }
 
     /**
@@ -259,6 +263,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 unreleased = vestingSchedule.amountTotal - vestingSchedule.released;
         vestingSchedulesTotalAmount = vestingSchedulesTotalAmount - unreleased;
         vestingSchedule.revoked = true;
+
+        emit VestingRevoked(vestingScheduleId);
     }
 
 
@@ -288,6 +294,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         address payable beneficiaryPayable = payable(vestingSchedule.beneficiary);
         vestingSchedulesTotalAmount = vestingSchedulesTotalAmount - amount;
         _token.safeTransfer(beneficiaryPayable, amount);
+
+        emit VestingReleased(vestingScheduleId, amount);
     }
 
     /**
@@ -383,6 +391,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
             vestingSchedules[vestingScheduleId].start == 0 ||
             vestingSchedules[vestingScheduleId].start > getCurrentTime(), "TokenVesting: schedule is already active");
         vestingSchedules[vestingScheduleId].start = start;
+
+        emit VestingUpdated(vestingScheduleId, start);
     }
 
     /**
@@ -401,6 +411,8 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
                 vestingSchedules[vestingScheduleIds[i]].start == 0 ||
                 vestingSchedules[vestingScheduleIds[i]].start > getCurrentTime(), "TokenVesting: schedule is already active");
             vestingSchedules[vestingScheduleIds[i]].start = startDates[i];
+
+            emit VestingUpdated(vestingScheduleIds[i], startDates[i]);
         }
     }
 
