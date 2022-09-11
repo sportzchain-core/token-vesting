@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.2;
+pragma solidity ^0.8.2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -219,7 +219,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
             require(_secondReleaseData.date > _firstReleaseData.date, "TokenVesting: second release date must be > first release date");
         }
 
-        createVestingScheduleInternal(
+        _createVestingSchedule(
             _beneficiary,
             _start,
             _cliff,
@@ -233,7 +233,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         );
     }
 
-    function createVestingScheduleInternal(
+    function _createVestingSchedule(
         address _beneficiary,
         uint256 _start,
         uint256 _cliff,
@@ -248,15 +248,9 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         // compute a unique id for the vesting schedule
         bytes32 vestingScheduleId = this.computeNextVestingScheduleIdForHolder(_beneficiary);
 
-        // set the cliff from the start time
-        // uint256 cliff = _start + _cliff;
-
+        // vesting start date is calculated from the first release date
         if(_firstReleaseData.date != 0) {
             _start = _firstReleaseData.date;
-        }
-
-        if(_secondReleaseData.date != 0) {
-            _start = _secondReleaseData.date;
         }
 
         // create the vesting schedule
