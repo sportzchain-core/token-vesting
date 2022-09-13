@@ -78,7 +78,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @dev Reverts if no vesting schedule matches the passed identifier.
     */
     modifier onlyIfVestingScheduleExists(bytes32 vestingScheduleId) {
-        require(vestingSchedules[vestingScheduleId].initialized == true);
+        require(vestingSchedules[vestingScheduleId].initialized);
         _;
     }
 
@@ -86,12 +86,12 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @dev Reverts if the vesting schedule does not exist or has been revoked.
     */
     modifier onlyIfVestingScheduleNotRevoked(bytes32 vestingScheduleId) {
-        require(vestingSchedules[vestingScheduleId].initialized == true);
-        require(vestingSchedules[vestingScheduleId].revoked == false);
+        require(vestingSchedules[vestingScheduleId].initialized);
+        require(!vestingSchedules[vestingScheduleId].revoked);
         _;
     }
 
-    function initialize(address token_, address owner_) public virtual initializer {
+    function initialize(address token_, address owner_) external virtual initializer {
         __TokenVesting_init_unchained(token_, owner_);
     }
 
@@ -133,7 +133,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     external
     view
     returns(bytes32){
-        require(index < getVestingSchedulesCount(), "TokenVesting: index out of bounds");
+        require(index < this.getVestingSchedulesCount(), "TokenVesting: index out of bounds");
         return vestingSchedulesIds[index];
     }
 
@@ -148,7 +148,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     external
     view
     returns(VestingSchedule memory){
-        return getVestingSchedule(computeVestingScheduleIdForAddressAndIndex(holder, index));
+        return this.getVestingSchedule(this.computeVestingScheduleIdForAddressAndIndex(holder, index));
     }
 
 
@@ -201,7 +201,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         Release memory _secondReleaseData,
         bool _fromLocked
     )
-    public
+    external
     onlyGrantor  {
         require(
             ((_fromLocked) ? lockedSchedule.amountTotal - lockedSchedule.released : this.getWithdrawableAmount()) >= _amount,
@@ -292,14 +292,14 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param vestingScheduleId the vesting schedule identifier
     */
     function revoke(bytes32 vestingScheduleId)
-    public
+    external
     onlyGrantor
     onlyIfVestingScheduleNotRevoked(vestingScheduleId){
         VestingSchedule storage vestingSchedule = vestingSchedules[vestingScheduleId];
         require(vestingSchedule.revocable == true, "TokenVesting: vesting is not revocable");
         uint256 vestedAmount = _computeReleasableAmount(vestingSchedule);
         if(vestedAmount > 0){
-            release(vestingScheduleId, vestedAmount);
+            this.release(vestingScheduleId, vestedAmount);
         }
         uint256 unreleased = vestingSchedule.amountTotal - vestingSchedule.released;
         vestingSchedulesTotalAmount = vestingSchedulesTotalAmount - unreleased;
@@ -319,7 +319,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         bytes32 vestingScheduleId,
         uint256 amount
     )
-    public
+    external
     nonReentrant
     onlyIfVestingScheduleNotRevoked(vestingScheduleId) {
         VestingSchedule storage vestingSchedule = vestingSchedules[vestingScheduleId];
@@ -347,7 +347,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     function releaseLocked(
         uint256 amount
     )
-    public
+    external
     onlyGrantor
     nonReentrant {
         uint256 vestedAmount = _computeReleasableAmount(lockedSchedule);
@@ -361,7 +361,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the number of vesting schedules
     */
     function getVestingSchedulesCount()
-    public
+    external
     view
     returns(uint256){
         return vestingSchedulesIds.length;
@@ -373,7 +373,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the vested amount
     */
     function computeLockedReleasableAmount()
-    public
+    external
     view
     returns(uint256){
         return _computeReleasableAmount(lockedSchedule);
@@ -386,7 +386,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the vested amount
     */
     function computeReleasableAmount(bytes32 vestingScheduleId)
-    public
+    external
     onlyIfVestingScheduleNotRevoked(vestingScheduleId)
     view
     returns(uint256){
@@ -401,7 +401,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the vesting schedule structure information
     */
     function getVestingSchedule(bytes32 vestingScheduleId)
-    public
+    external
     view
     returns(VestingSchedule memory){
         return vestingSchedules[vestingScheduleId];
@@ -413,7 +413,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the vesting schedule structure information
     */
     function getLockedVestingSchedule()
-    public
+    external
     view
     returns(VestingSchedule memory){
         return lockedSchedule;
@@ -426,7 +426,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param start start time of the vesting period
     */
     function setStartDateOfVestingSchedule(bytes32 vestingScheduleId, uint256 start)
-    public
+    external
     onlyGrantor {
         require(
             vestingSchedules[vestingScheduleId].start == 0 ||
@@ -449,7 +449,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param receiver the amount receiver address
     */
     function withdraw(uint256 amount, address receiver)
-    public
+    external
     onlyGrantor
     nonReentrant  {
         require(this.getWithdrawableAmount() >= amount, "TokenVesting: not enough withdrawable funds");
@@ -470,7 +470,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
         uint256 _duration,
         uint256 _slicePeriodSeconds
     )
-    public
+    external
     onlyGrantor
     nonReentrant {
         require(
@@ -501,7 +501,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @return the amount of tokens
     */
     function getWithdrawableAmount()
-    public
+    external
     view
     returns(uint256){
         return _token.balanceOf(address(this)) - vestingSchedulesTotalAmount;
@@ -513,10 +513,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param holder - address of the vesting holder
     */
     function computeNextVestingScheduleIdForHolder(address holder)
-    public
+    external
     view
     returns(bytes32){
-        return computeVestingScheduleIdForAddressAndIndex(holder, holdersVestingCount[holder]);
+        return this.computeVestingScheduleIdForAddressAndIndex(holder, holdersVestingCount[holder]);
     }
 
     /**
@@ -525,10 +525,10 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     * @param holder - address of the vesting holder
     */
     function getLastVestingScheduleForHolder(address holder)
-    public
+    external
     view
     returns(VestingSchedule memory){
-        return vestingSchedules[computeVestingScheduleIdForAddressAndIndex(holder, holdersVestingCount[holder] - 1)];
+        return vestingSchedules[this.computeVestingScheduleIdForAddressAndIndex(holder, holdersVestingCount[holder] - 1)];
     }
 
     /**
@@ -537,7 +537,7 @@ contract TokenVesting is Ownable, AccessControl, ReentrancyGuard, Initializable 
     *
     */
     function computeVestingScheduleIdForAddressAndIndex(address holder, uint256 index)
-    public
+    external
     pure
     returns(bytes32){
         return keccak256(abi.encodePacked(holder, index));
