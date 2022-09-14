@@ -4,14 +4,17 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Cloner {
+contract Cloner is Ownable {
     using Address for address;
     using Clones for address;
 
     event NewInstance(address implementation, address instance, string name);
 
-    function clone(address implementation, bytes memory data, string memory name) public payable {
+    constructor() Ownable() {}
+
+    function clone(address implementation, bytes memory data, string memory name) external payable onlyOwner {
         _initAndEmit(implementation.clone(), data, name, implementation);
     }
 
@@ -20,7 +23,7 @@ contract Cloner {
         bytes32 salt,
         bytes calldata initdata,
         string memory name
-    ) public payable {
+    ) external payable onlyOwner {
         _initAndEmit(implementation.cloneDeterministic(salt), initdata, name, implementation);
     }
 
